@@ -65,7 +65,7 @@ static int json_parse_literal(json_context *c, json_value *v,
 
 static int json_parse_number(json_context *c, json_value *v)
 {
-    char *end, *p;
+    char *p;
     p = (char *) c->json;
 
     /* validate number */
@@ -96,12 +96,11 @@ static int json_parse_number(json_context *c, json_value *v)
             ;
     }
 
-    v->json_n = strtod(c->json, &end);
-    if (end == c->json)
-        return JSON_PARSE_INVALID_VALUE;
-    if (errno == ERANGE && v->json_n == HUGE_VAL)
+    errno = 0;
+    v->json_n = strtod(c->json, NULL);
+    if (errno == ERANGE && (v->json_n == HUGE_VAL || v->json_n == -HUGE_VAL))
         return JSON_PARSE_NUMBER_TOO_BIG;
-    c->json = end;
+    c->json = p;
     v->type = JSON_NUMBER;
     return JSON_PARSE_OK;
 }
@@ -122,10 +121,29 @@ static int json_parse_string(json_context *c, json_value *v)
             json_set_string(v, (const char *) json_context_pop(c, len), len);
             c->json = p;
             return JSON_PARSE_OK;
+        case '\\':
+            switch (*p++) {
+            case '\\': PUTC(c, '\\'); break;
+            case '/':  PUTC(c, '/' ); break;
+            case '\"': PUTC(c, '\"'); break;
+            case 't':  PUTC(c, '\t'); break;
+            case 'b':  PUTC(c, '\b'); break;
+            case 'f':  PUTC(c, '\f'); break;
+            case 'n':  PUTC(c, '\n'); break;
+            case 'r':  PUTC(c, '\r'); break;
+            default:
+                c->top = head;
+                return JSON_PARSE_INVALID_STRING_ESCAPE;
+            }
+            break;
         case '\0':
             c->top = head;
-            return LEPT_PARSE_MISS_QUOTATION_MARK;
+            return JSON_PARSE_MISS_QUOTATION_MARK;
         default:
+            if (ch >= '\x00' && ch <= '\x1F') {
+                c->top = head;
+                return JSON_PARSE_INVALID_STRING_CHAR;
+            }
             PUTC(c, ch);
         }
     }
@@ -165,8 +183,10 @@ int json_parse(json_value *v, const char *json)
     json_parse_whitespace(&c);
     if ((ret = json_parse_value(&c, v)) == JSON_PARSE_OK) {
         json_parse_whitespace(&c);
-        if (c.json[0] != '\0')
+        if (c.json[0] != '\0') {
+            v->type = JSON_NULL;
             ret = JSON_PARSE_ROOT_NOT_SINGULAR;
+        }
     }
     assert(c.top == 0);
     free(c.stack);
@@ -175,20 +195,20 @@ int json_parse(json_value *v, const char *json)
 
 json_type json_get_type(const json_value *v)
 {
-    assert(v != NULL && v->type < JSON_INVALID);
+    assert(v != NULL);
     return v->type;
 }
 
-/* Fix them */
 int json_get_boolean(const json_value *v)
 {
     assert(v != NULL && (v->type == JSON_TRUE || v->type == JSON_FALSE));
-    return 0;
+    return v->type == JSON_TRUE;
 }
 
 void json_set_boolean(json_value *v, int b)
 {
-    assert(v != NULL && (v->type == JSON_TRUE || v->type == JSON_FALSE));
+    json_free(v);
+    v->type = b ? JSON_TRUE : JSON_FALSE;
 }
 
 double json_get_number(const json_value *v)
@@ -199,8 +219,9 @@ double json_get_number(const json_value *v)
 
 void json_set_number(json_value *v, double n)
 {
-    assert(v != NULL && v->type == JSON_NUMBER);
+    json_free(v);
     v->json_n = n;
+    v->type = JSON_NUMBER;
 }
 
 const char *json_get_string(const json_value *v)
