@@ -1,0 +1,3 @@
+/home/yungkc/git/json/build/CMakeFiles/edit_cache.dir
+/home/yungkc/git/json/build/CMakeFiles/rebuild_cache.dir
+/home/yungkc/git/json/build/CMakeFiles/jsonParser.dir
