@@ -18,7 +18,8 @@ typedef enum {
     JSON_OBJECT,
 } json_type;
 
-typedef struct json_value json_value;
+typedef struct json_value  json_value;
+typedef struct json_member json_member;
 struct json_value {
     union {
         struct {
@@ -29,14 +30,26 @@ struct json_value {
             json_value *e;
             size_t size;
         } a;
+        struct {
+            json_member *m;
+            size_t objsize;
+        } o;
         double n;
     } u;
+#define json_n     u.n
 #define json_s     u.s.s
 #define json_len   u.s.len
-#define json_n     u.n
 #define json_e     u.a.e
 #define json_size  u.a.size
+#define json_m   u.o.m
+#define json_osz   u.o.objsize
     json_type type;
+};
+
+struct json_member {
+    char *k;
+    size_t klen;
+    json_value v;
 };
 
 enum {
@@ -50,7 +63,10 @@ enum {
     JSON_PARSE_INVALID_UNICODE_HEX,
     JSON_PARSE_INVALID_UNICODE_SURROGATE,
     JSON_PARSE_MISS_COMMA_OR_SQUARE_BRACKET,
-    JSON_PARSE_ROOT_NOT_SINGULAR
+    JSON_PARSE_ROOT_NOT_SINGULAR,
+    JSON_PARSE_MISS_COLON,
+    JSON_PARSE_MISS_KEY,
+    JSON_PARSE_MISS_COMMA_OR_CURLY_BRACKET
 };
 
 #define json_init(v) do { (v)->type = JSON_NULL; } while (0)
@@ -72,5 +88,10 @@ json_type json_get_type(const json_value *v);
 
 json_value *json_get_array_element(const json_value *v, size_t index);
 size_t json_get_array_size(const json_value *v);
+
+size_t json_get_object_size(const json_value *v);
+const char *json_get_object_key(const json_value *v, size_t index);
+size_t json_get_object_key_length(const json_value *v, size_t index);
+json_value *json_get_object_value(const json_value *v, size_t index);
 
 #endif //JSON_PARSER_H__

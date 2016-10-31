@@ -128,16 +128,101 @@ static void test_parse_string() {
 }
 
 static void test_parse_array() {
+    size_t i, j;
     json_value v;
+
+    json_init(&v);
+    EXPECT_EQ_INT(JSON_PARSE_OK, json_parse(&v, "[ ]"));
+    EXPECT_EQ_INT(JSON_ARRAY, json_get_type(&v));
+    EXPECT_EQ_SIZE_T(0, json_get_array_size(&v));
+    json_free(&v);
+
+    json_init(&v);
+    EXPECT_EQ_INT(JSON_PARSE_OK, json_parse(&v, "[ null , false , true , 123 , \"abc\" ]"));
+    EXPECT_EQ_INT(JSON_ARRAY, json_get_type(&v));
+    EXPECT_EQ_SIZE_T(5, json_get_array_size(&v));
+    EXPECT_EQ_INT(JSON_NULL,   json_get_type(json_get_array_element(&v, 0)));
+    EXPECT_EQ_INT(JSON_FALSE,  json_get_type(json_get_array_element(&v, 1)));
+    EXPECT_EQ_INT(JSON_TRUE,   json_get_type(json_get_array_element(&v, 2)));
+    EXPECT_EQ_INT(JSON_NUMBER, json_get_type(json_get_array_element(&v, 3)));
+    EXPECT_EQ_INT(JSON_STRING, json_get_type(json_get_array_element(&v, 4)));
+    EXPECT_EQ_DOUBLE(123.0, json_get_number(json_get_array_element(&v, 3)));
+    EXPECT_EQ_STRING("abc", json_get_string(json_get_array_element(&v, 4)), json_get_string_length(json_get_array_element(&v, 4)));
+    json_free(&v);
 
     json_init(&v);
     EXPECT_EQ_INT(JSON_PARSE_OK, json_parse(&v, "[ [ ] , [ 0 ] , [ 0 , 1 ] , [ 0 , 1 , 2 ] ]"));
     EXPECT_EQ_INT(JSON_ARRAY, json_get_type(&v));
-    EXPECT_EQ_INT(JSON_ARRAY, json_get_type(json_get_array_element(&v, 0)));
-    EXPECT_EQ_INT(JSON_ARRAY, json_get_type(json_get_array_element(&v, 1)));
-    EXPECT_EQ_INT(JSON_ARRAY, json_get_type(json_get_array_element(&v, 2)));
-    EXPECT_EQ_DOUBLE(2.0, json_get_number(json_get_array_element(json_get_array_element(&v, 3), 2)));
     EXPECT_EQ_SIZE_T(4, json_get_array_size(&v));
+    for (i = 0; i < 4; i++) {
+        json_value* a = json_get_array_element(&v, i);
+        EXPECT_EQ_INT(JSON_ARRAY, json_get_type(a));
+        EXPECT_EQ_SIZE_T(i, json_get_array_size(a));
+        for (j = 0; j < i; j++) {
+            json_value* e = json_get_array_element(a, j);
+            EXPECT_EQ_INT(JSON_NUMBER, json_get_type(e));
+            EXPECT_EQ_DOUBLE((double)j, json_get_number(e));
+        }
+    }
+    json_free(&v);
+}
+
+static void test_parse_object() {
+    json_value v;
+    size_t i;
+
+    json_init(&v);
+    EXPECT_EQ_INT(JSON_PARSE_OK, json_parse(&v, " { } "));
+    EXPECT_EQ_INT(JSON_OBJECT, json_get_type(&v));
+    EXPECT_EQ_SIZE_T(0, json_get_object_size(&v));
+    json_free(&v);
+
+    json_init(&v);
+    EXPECT_EQ_INT(JSON_PARSE_OK, json_parse(&v,
+        " { "
+        "\"n\" : null , "
+        "\"f\" : false , "
+        "\"t\" : true , "
+        "\"i\" : 123 , "
+        "\"s\" : \"abc\", "
+        "\"a\" : [ 1, 2, 3 ],"
+        "\"o\" : { \"1\" : 1, \"2\" : 2, \"3\" : 3 }"
+        " } "
+    ));
+    EXPECT_EQ_INT(JSON_OBJECT, json_get_type(&v));
+    EXPECT_EQ_SIZE_T(7, json_get_object_size(&v));
+    EXPECT_EQ_STRING("n", json_get_object_key(&v, 0), json_get_object_key_length(&v, 0));
+    EXPECT_EQ_INT(JSON_NULL,   json_get_type(json_get_object_value(&v, 0)));
+    EXPECT_EQ_STRING("f", json_get_object_key(&v, 1), json_get_object_key_length(&v, 1));
+    EXPECT_EQ_INT(JSON_FALSE,  json_get_type(json_get_object_value(&v, 1)));
+    EXPECT_EQ_STRING("t", json_get_object_key(&v, 2), json_get_object_key_length(&v, 2));
+    EXPECT_EQ_INT(JSON_TRUE,   json_get_type(json_get_object_value(&v, 2)));
+    EXPECT_EQ_STRING("i", json_get_object_key(&v, 3), json_get_object_key_length(&v, 3));
+    EXPECT_EQ_INT(JSON_NUMBER, json_get_type(json_get_object_value(&v, 3)));
+    EXPECT_EQ_DOUBLE(123.0, json_get_number(json_get_object_value(&v, 3)));
+    EXPECT_EQ_STRING("s", json_get_object_key(&v, 4), json_get_object_key_length(&v, 4));
+    EXPECT_EQ_INT(JSON_STRING, json_get_type(json_get_object_value(&v, 4)));
+    EXPECT_EQ_STRING("abc", json_get_string(json_get_object_value(&v, 4)), json_get_string_length(json_get_object_value(&v, 4)));
+    EXPECT_EQ_STRING("a", json_get_object_key(&v, 5), json_get_object_key_length(&v, 5));
+    EXPECT_EQ_INT(JSON_ARRAY, json_get_type(json_get_object_value(&v, 5)));
+    EXPECT_EQ_SIZE_T(3, json_get_array_size(json_get_object_value(&v, 5)));
+    for (i = 0; i < 3; i++) {
+        json_value* e = json_get_array_element(json_get_object_value(&v, 5), i);
+        EXPECT_EQ_INT(JSON_NUMBER, json_get_type(e));
+        EXPECT_EQ_DOUBLE(i + 1.0, json_get_number(e));
+    }
+    EXPECT_EQ_STRING("o", json_get_object_key(&v, 6), json_get_object_key_length(&v, 6));
+    {
+        json_value* o = json_get_object_value(&v, 6);
+        EXPECT_EQ_INT(JSON_OBJECT, json_get_type(o));
+        for (i = 0; i < 3; i++) {
+            json_value* ov = json_get_object_value(o, i);
+            EXPECT_TRUE('1' + i == json_get_object_key(o, i)[0]);
+            EXPECT_EQ_SIZE_T(1, json_get_object_key_length(o, i));
+            EXPECT_EQ_INT(JSON_NUMBER, json_get_type(ov));
+            EXPECT_EQ_DOUBLE(i + 1.0, json_get_number(ov));
+        }
+    }
     json_free(&v);
 }
 
@@ -172,21 +257,7 @@ static void test_parse_invalid_value() {
 
     /* invalid value in array */
     TEST_ERROR(JSON_PARSE_INVALID_VALUE, "[1,]");
-}
-
-#define TEST_LEAK(error, json)\
-    do {\
-        json_value v;\
-        json_init(&v);\
-        v.type = JSON_FALSE;\
-        EXPECT_EQ_INT(error, json_parse(&v, json));\
-        EXPECT_EQ_INT(JSON_NULL, json_get_type(&v));\
-        json_free(&v);\
-    } while(0)
-
-static void test_parse_leak()
-{
-    TEST_LEAK(JSON_PARSE_INVALID_VALUE, "[\"a\", nul]");
+    TEST_ERROR(JSON_PARSE_INVALID_VALUE, "[\"a\", nul]");
 }
 
 static void test_parse_root_not_singular() {
@@ -251,6 +322,29 @@ static void test_parse_miss_comma_or_square_bracket() {
     TEST_ERROR(JSON_PARSE_MISS_COMMA_OR_SQUARE_BRACKET, "[[]");
 }
 
+static void test_parse_miss_key() {
+    TEST_ERROR(JSON_PARSE_MISS_KEY, "{:1,");
+    TEST_ERROR(JSON_PARSE_MISS_KEY, "{1:1,");
+    TEST_ERROR(JSON_PARSE_MISS_KEY, "{true:1,");
+    TEST_ERROR(JSON_PARSE_MISS_KEY, "{false:1,");
+    TEST_ERROR(JSON_PARSE_MISS_KEY, "{null:1,");
+    TEST_ERROR(JSON_PARSE_MISS_KEY, "{[]:1,");
+    TEST_ERROR(JSON_PARSE_MISS_KEY, "{{}:1,");
+    TEST_ERROR(JSON_PARSE_MISS_KEY, "{\"a\":1,");
+}
+
+static void test_parse_miss_colon() {
+    TEST_ERROR(JSON_PARSE_MISS_COLON, "{\"a\"}");
+    TEST_ERROR(JSON_PARSE_MISS_COLON, "{\"a\",\"b\"}");
+}
+
+static void test_parse_miss_comma_or_curly_bracket() {
+    TEST_ERROR(JSON_PARSE_MISS_COMMA_OR_CURLY_BRACKET, "{\"a\":1");
+    TEST_ERROR(JSON_PARSE_MISS_COMMA_OR_CURLY_BRACKET, "{\"a\":1]");
+    TEST_ERROR(JSON_PARSE_MISS_COMMA_OR_CURLY_BRACKET, "{\"a\":1 \"b\"");
+    TEST_ERROR(JSON_PARSE_MISS_COMMA_OR_CURLY_BRACKET, "{\"a\":{}");
+}
+
 static void test_parse() {
     test_parse_null();
     test_parse_true();
@@ -258,6 +352,8 @@ static void test_parse() {
     test_parse_number();
     test_parse_string();
     test_parse_array();
+    test_parse_object();
+
     test_parse_expect_value();
     test_parse_invalid_value();
     test_parse_root_not_singular();
@@ -268,7 +364,9 @@ static void test_parse() {
     test_parse_invalid_unicode_hex();
     test_parse_invalid_unicode_surrogate();
     test_parse_miss_comma_or_square_bracket();
-    test_parse_leak();
+    test_parse_miss_key();
+    test_parse_miss_colon();
+    test_parse_miss_comma_or_curly_bracket();
 }
 
 static void test_access_null() {
@@ -318,9 +416,6 @@ static void test_access() {
 }
 
 int main() {
-#ifdef _WINDOWS
-    _CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
-#endif
     test_parse();
     test_access();
     printf("%d/%d (%3.2f%%) passed\n", test_pass, test_count, test_pass * 100.0 / test_count);
