@@ -435,16 +435,12 @@ static void test_stringify()
     TEST_ROUNDTRIP("true");
     TEST_ROUNDTRIP("\"Hello\"");
     TEST_ROUNDTRIP("\"\"");
-    TEST_ROUNDTRIP("\"Hello\"");
     TEST_ROUNDTRIP("\"Hello\\nWorld\"");
     TEST_ROUNDTRIP("\"\\\" \\\\ \\/ \\b \\f \\n \\r \\t\"");
     TEST_ROUNDTRIP("\"Hello\\u0000World\"");
-#if 0
-    TEST_ROUNDTRIP("\"\\u0024\"");         /* Dollar sign U+0024 */
     TEST_ROUNDTRIP("\"\\u00A2\"");     /* Cents sign U+00A2 */
     TEST_ROUNDTRIP("\"\\u20AC\""); /* Euro sign U+20AC */
     TEST_ROUNDTRIP("\"\\uD834\\uDD1E\"");  /* G clef sign U+1D11E */
-#endif
     TEST_ROUNDTRIP("[null,false,true,123,\"abc\"]");
     TEST_ROUNDTRIP("[]");
     TEST_ROUNDTRIP("123.456");

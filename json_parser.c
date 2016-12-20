@@ -500,15 +500,44 @@ json_value *json_get_object_value(const json_value *v, size_t index)
 
 #define PUTS(c, s, len)   memcpy(json_context_push(c, len), s, len);
 
+static unsigned json_decode_utf8(const u_char* ch, size_t* pos)
+{
+    unsigned u = 0;
+    ch += *pos;
+    unsigned hex = *ch;
+    if (hex <= 0xdf) {
+        u |= (*ch & 0x1f);
+        u <<= 6, ch++, (*pos)++;
+        u |= (*ch & 0x3f);
+    } else if (hex <= 0xef) {
+        u |= (*ch & 0x0f);
+        u <<= 6, ch++, (*pos)++;
+        u |= (*ch & 0x3f);
+        u <<= 6, ch++, (*pos)++;
+        u |= (*ch & 0x3f);
+    } else if (hex <= 0xf7) {
+        u |= (*ch & 0x07);
+        u <<= 6, ch++, (*pos)++;
+        u |= (*ch & 0x3f);
+        u <<= 6, ch++, (*pos)++;
+        u |= (*ch & 0x3f);
+        u <<= 6, ch++, (*pos)++;
+        u |= (*ch & 0x3f);
+    }
+    return u;
+}
+
 static int json_stringify_string(json_context* c, const json_value* v)
 {
     char tmp[32];
+    const u_char* p;
 
     if (v->json_s == NULL)
         return JSON_STRINGIFY_STRING_NULL;
+    p = (const u_char*) v->json_s;
     PUTC(c, '\"');
     for (size_t i = 0; i < v->json_len; ++i) {
-        char ch = v->json_s[i];
+        u_char ch = p[i];
         switch (ch) {
         case '\\':
         case '/':
@@ -523,8 +552,20 @@ static int json_stringify_string(json_context* c, const json_value* v)
         case '\f': PUTS(c, "\\f", 2); break;
         default:
             if (ch < 0x20) {
-                int len = sprintf(tmp, "\\u00%02x", ch);
-                PUTS(c, tmp, len);
+                sprintf(tmp, "\\u00%02X", ch);
+                PUTS(c, tmp, 6);
+            } else if (ch > 0x7f) { /* Handle UTF-8. */
+                unsigned u = json_decode_utf8(p, &i);;
+                if (u <= 0xffff) {
+                    sprintf(tmp, "\\u%04X", u);
+                    PUTS(c, tmp, 6);
+                } else if (u <= 0x10ffff) {
+                    // TODO:
+                    unsigned h, l;
+                    sprintf(tmp, "\\u%04X\\u%04x", h, l);
+                    PUTS(c, tmp, 12);
+                }
+                printf("%x\n", u);
             } else {
                 PUTC(c, ch);
             }
