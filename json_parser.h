@@ -66,7 +66,12 @@ enum {
     JSON_PARSE_ROOT_NOT_SINGULAR,
     JSON_PARSE_MISS_COLON,
     JSON_PARSE_MISS_KEY,
-    JSON_PARSE_MISS_COMMA_OR_CURLY_BRACKET
+    JSON_PARSE_MISS_COMMA_OR_CURLY_BRACKET,
+    JSON_STRINGIFY_OK,
+    JSON_STRINGIFY_STRING_NULL,
+    JSON_STRINGIFY_OBJECT_NULL,
+    JSON_STRINGIFY_ARRAY_NULL,
+    JSON_STRINGIFY_OBJECT_MEMBER_NULL,
 };
 
 #define json_init(v) do { (v)->type = JSON_NULL; } while (0)
@@ -93,5 +98,7 @@ size_t json_get_object_size(const json_value *v);
 const char *json_get_object_key(const json_value *v, size_t index);
 size_t json_get_object_key_length(const json_value *v, size_t index);
 json_value *json_get_object_value(const json_value *v, size_t index);
+
+int json_stringify(const json_value* v, char** json, size_t* length);
 
 #endif //JSON_PARSER_H__

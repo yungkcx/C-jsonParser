@@ -415,9 +415,47 @@ static void test_access() {
     test_access_string();
 }
 
+#define TEST_ROUNDTRIP(json)\
+    do {\
+        json_value v;\
+        char* json2;\
+        size_t length;\
+        json_init(&v);\
+        EXPECT_EQ_INT(JSON_PARSE_OK, json_parse(&v, json));\
+        EXPECT_EQ_INT(JSON_STRINGIFY_OK, json_stringify(&v, &json2, &length));\
+        EXPECT_EQ_STRING(json, json2, length);\
+        json_free(&v);\
+        free(json2);\
+    } while (0)
+
+static void test_stringify()
+{
+    TEST_ROUNDTRIP("null");
+    TEST_ROUNDTRIP("false");
+    TEST_ROUNDTRIP("true");
+    TEST_ROUNDTRIP("\"Hello\"");
+    TEST_ROUNDTRIP("\"\"");
+    TEST_ROUNDTRIP("\"Hello\"");
+    TEST_ROUNDTRIP("\"Hello\\nWorld\"");
+    TEST_ROUNDTRIP("\"\\\" \\\\ \\/ \\b \\f \\n \\r \\t\"");
+    TEST_ROUNDTRIP("\"Hello\\u0000World\"");
+#if 0
+    TEST_ROUNDTRIP("\"\\u0024\"");         /* Dollar sign U+0024 */
+    TEST_ROUNDTRIP("\"\\u00A2\"");     /* Cents sign U+00A2 */
+    TEST_ROUNDTRIP("\"\\u20AC\""); /* Euro sign U+20AC */
+    TEST_ROUNDTRIP("\"\\uD834\\uDD1E\"");  /* G clef sign U+1D11E */
+#endif
+    TEST_ROUNDTRIP("[null,false,true,123,\"abc\"]");
+    TEST_ROUNDTRIP("[]");
+    TEST_ROUNDTRIP("123.456");
+    TEST_ROUNDTRIP("{}");
+    TEST_ROUNDTRIP("{\"n\":null,\"f\":false,\"t\":true,\"i\":123,\"s\":\"abc\",\"a\":[1,2,3],\"o\":{\"1\":1,\"2\":2,\"3\":3}}");
+}
+
 int main() {
     test_parse();
     test_access();
+    test_stringify();
     printf("%d/%d (%3.2f%%) passed\n", test_pass, test_count, test_pass * 100.0 / test_count);
     return main_ret;
 }

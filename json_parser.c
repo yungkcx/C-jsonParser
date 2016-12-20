@@ -154,7 +154,6 @@ static int json_parse_string_raw(json_context *c, char **str, size_t *len)
     EXPECT(c, '\"');
     head = c->top;
     p = c->json;
-    json_value *v;
     for ( ; ; ) {
         char ch = *p++;
         switch (ch) {
@@ -477,7 +476,6 @@ size_t json_get_object_size(const json_value *v)
     return v->json_osz;
 }
 
-// FIX IT
 const char *json_get_object_key(const json_value *v, size_t index)
 {
     assert(v != NULL && v->type == JSON_OBJECT);
@@ -494,4 +492,119 @@ json_value *json_get_object_value(const json_value *v, size_t index)
 {
     assert(v != NULL && v->type == JSON_OBJECT);
     return &v->json_m[index].v;
+}
+
+#ifndef JSON_PARSE_STRINGIFY_INIT_SIZE
+# define JSON_PARSE_STRINGIFY_INIT_SIZE 256
+#endif
+
+#define PUTS(c, s, len)   memcpy(json_context_push(c, len), s, len);
+
+static int json_stringify_string(json_context* c, const json_value* v)
+{
+    char tmp[32];
+
+    if (v->json_s == NULL)
+        return JSON_STRINGIFY_STRING_NULL;
+    PUTC(c, '\"');
+    for (size_t i = 0; i < v->json_len; ++i) {
+        char ch = v->json_s[i];
+        switch (ch) {
+        case '\\':
+        case '/':
+        case '\"':
+            PUTC(c, '\\');
+            PUTC(c, ch);
+            break;
+        case '\t': PUTS(c, "\\t", 2); break;
+        case '\b': PUTS(c, "\\b", 2); break;
+        case '\n': PUTS(c, "\\n", 2); break;
+        case '\r': PUTS(c, "\\r", 2); break;
+        case '\f': PUTS(c, "\\f", 2); break;
+        default:
+            if (ch < 0x20) {
+                int len = sprintf(tmp, "\\u00%02x", ch);
+                PUTS(c, tmp, len);
+            } else {
+                PUTC(c, ch);
+            }
+            break;
+        }
+    }
+    PUTC(c, '\"');
+    return JSON_STRINGIFY_OK;
+}
+
+static int json_stringify_value(json_context* c, const json_value* v);
+static int json_stringify_object_member(json_context* c, const json_member* m)
+{
+    if (m->k == NULL)
+        return JSON_STRINGIFY_OBJECT_MEMBER_NULL;
+    PUTC(c, '\"');
+    PUTS(c, m->k, m->klen);
+    PUTC(c, '\"');
+    PUTC(c, ':');
+    json_stringify_value(c, &m->v);
+    return JSON_STRINGIFY_OK;
+}
+
+static int json_stringify_value(json_context* c, const json_value* v)
+{
+    int ret;
+
+    switch (v->type) {
+    case JSON_NULL:  PUTS(c, "null", 4); break;
+    case JSON_TRUE:  PUTS(c, "true", 4); break;
+    case JSON_FALSE: PUTS(c, "false", 5); break;
+    case JSON_NUMBER:
+        c->top -= 32 - sprintf(json_context_push(c, 32), "%.17g", v->json_n);
+        break;
+    case JSON_OBJECT:
+        PUTC(c, '{');
+        for (size_t i = 0; i < v->json_osz; ++i) {
+            if ((ret = json_stringify_object_member(c, &v->json_m[i])) != JSON_STRINGIFY_OK)
+                return ret;
+            PUTC(c, ',');
+        }
+        if (v->json_osz > 0)
+            json_context_pop(c, 1);   /* Delete the last ',' */
+        PUTC(c, '}');
+        break;
+    case JSON_ARRAY:
+        PUTC(c, '[');
+        for (size_t i = 0; i < v->json_size; ++i) {
+            json_stringify_value(c, &v->json_e[i]);
+            PUTC(c, ',');
+        }
+        if (v->json_size)
+            json_context_pop(c, 1);  /* Delete the last ',' */
+        PUTC(c, ']');
+        break;
+    case JSON_STRING:
+        if ((ret = json_stringify_string(c, v)) != JSON_STRINGIFY_OK)
+            return ret;
+        break;
+    }
+    return JSON_STRINGIFY_OK;
+}
+
+int json_stringify(const json_value* v, char** json, size_t* length)
+{
+    json_context c;
+    int ret;
+    
+    assert(v != NULL);
+    assert(json != NULL);
+    c.stack = malloc(c.size = JSON_PARSE_STRINGIFY_INIT_SIZE);
+    c.top = 0;
+    if ((ret = json_stringify_value(&c, v)) != JSON_STRINGIFY_OK) {
+        free(c.stack);
+        *json = NULL;
+        return ret;
+    }
+    if (length)
+        *length = c.top;
+    PUTC(&c, '\0');
+    *json = c.stack;
+    return JSON_STRINGIFY_OK;
 }
