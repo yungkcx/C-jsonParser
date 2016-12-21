@@ -559,13 +559,14 @@ static int json_stringify_string(json_context* c, const json_value* v)
                 if (u <= 0xffff) {
                     sprintf(tmp, "\\u%04X", u);
                     PUTS(c, tmp, 6);
-                } else if (u <= 0x10ffff) {
-                    // TODO:
+                } else if (u <= 0x10ffff) { /* Transfer codepoint to surrogate pair. */
                     unsigned h, l;
-                    sprintf(tmp, "\\u%04X\\u%04x", h, l);
+                    u -= 0x10000;
+                    h = (u - (l = u % 0x400)) / 0x400;
+                    h += 0xd800, l += 0xdc00;
+                    sprintf(tmp, "\\u%04X\\u%04X", h, l);
                     PUTS(c, tmp, 12);
                 }
-                printf("%x\n", u);
             } else {
                 PUTC(c, ch);
             }
