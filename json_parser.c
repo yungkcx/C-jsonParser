@@ -25,7 +25,7 @@ static void *json_context_push(json_context *c, size_t size)
         if (c->size == 0)
             c->size = JSON_PARSE_STACK_INIT_SIZE;
         while (c->top + size >= c->size)
-            c->size += c->size >> 1;
+            c->size += c->size >> 1;   /* c->size *= 1.5 */
         c->stack = (char *) realloc(c->stack, c->size);
     }
     ret = c->stack + c->top;
@@ -168,7 +168,7 @@ static int json_parse_string_raw(json_context *c, char **str, size_t *len)
             switch (*p++) {
             case '\\': PUTC(c, '\\'); break;
             case '/':  PUTC(c, '/' ); break;
-            case '\"': PUTC(c, '\"'); break;
+            case '"': PUTC(c, '"'); break;
             case 't':  PUTC(c, '\t'); break;
             case 'b':  PUTC(c, '\b'); break;
             case 'f':  PUTC(c, '\f'); break;
@@ -527,73 +527,83 @@ static unsigned json_decode_utf8(const u_char* ch, size_t* pos)
     return u;
 }
 
-static int json_stringify_string(json_context* c, const json_value* v)
+static void json_stringify_string(json_context* c, const json_value* v)
 {
-    char tmp[32];
-    const u_char* p;
+    static const char hex_digits[] = { '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F' };
+    size_t size;
+    u_char* p;
+    u_char* head;
 
-    if (v->json_s == NULL)
-        return JSON_STRINGIFY_STRING_NULL;
-    p = (const u_char*) v->json_s;
-    PUTC(c, '\"');
+    assert(v->json_s != NULL);
+    if (v->json_len > 0)
+        size = v->json_len * 6 - 2;
+    else
+        size = 2; /* "\"\"" */
+    p = head = json_context_push(c, size);
+    *p++ = '"';
     for (size_t i = 0; i < v->json_len; ++i) {
-        u_char ch = p[i];
+        u_char ch = (u_char) v->json_s[i];
         switch (ch) {
-        case '\\':
-        case '/':
-        case '\"':
-            PUTC(c, '\\');
-            PUTC(c, ch);
-            break;
-        case '\t': PUTS(c, "\\t", 2); break;
-        case '\b': PUTS(c, "\\b", 2); break;
-        case '\n': PUTS(c, "\\n", 2); break;
-        case '\r': PUTS(c, "\\r", 2); break;
-        case '\f': PUTS(c, "\\f", 2); break;
+        case '\\': *p++ = '\\'; *p++ = '\\'; break;
+        case '"':  *p++ = '\\'; *p++ = '"'; break;
+        case '/':  *p++ = '\\'; *p++ = '/'; break;
+        case '\t': *p++ = '\\'; *p++ = 't'; break;
+        case '\b': *p++ = '\\'; *p++ = 'b'; break;
+        case '\n': *p++ = '\\'; *p++ = 'n'; break;
+        case '\r': *p++ = '\\'; *p++ = 'r'; break;
+        case '\f': *p++ = '\\'; *p++ = 'f'; break;
         default:
             if (ch < 0x20) {
-                sprintf(tmp, "\\u00%02X", ch);
-                PUTS(c, tmp, 6);
+                *p++ = '\\'; *p++ = 'u'; *p++ = '0'; *p++ = '0';
+                *p++ = hex_digits[ch >> 4];
+                *p++ = hex_digits[ch & 15];
             } else if (ch > 0x7f) { /* Handle UTF-8. */
-                unsigned u = json_decode_utf8(p, &i);;
+                unsigned u = json_decode_utf8((const u_char*) v->json_s, &i);;
                 if (u <= 0xffff) {
-                    sprintf(tmp, "\\u%04X", u);
-                    PUTS(c, tmp, 6);
+                    *p++ = '\\'; *p++ = 'u';
+                    *p++ = hex_digits[u >> 12];
+                    *p++ = hex_digits[(u >> 8) & 15];
+                    *p++ = hex_digits[(u >> 4) & 15];
+                    *p++ = hex_digits[u & 15];
                 } else if (u <= 0x10ffff) { /* Transfer codepoint to surrogate pair. */
                     unsigned h, l;
                     u -= 0x10000;
                     h = (u - (l = u % 0x400)) / 0x400;
                     h += 0xd800, l += 0xdc00;
-                    sprintf(tmp, "\\u%04X\\u%04X", h, l);
-                    PUTS(c, tmp, 12);
+                    *p++ = '\\'; *p++ = 'u';
+                    *p++ = hex_digits[h >> 12];
+                    *p++ = hex_digits[(h >> 8) & 15];
+                    *p++ = hex_digits[(h >> 4) & 15];
+                    *p++ = hex_digits[h & 15];
+                    *p++ = '\\'; *p++ = 'u';
+                    *p++ = hex_digits[l >> 12];
+                    *p++ = hex_digits[(l >> 8) & 15];
+                    *p++ = hex_digits[(l >> 4) & 15];
+                    *p++ = hex_digits[l & 15];
                 }
             } else {
-                PUTC(c, ch);
+                *p++ = v->json_s[i];
             }
             break;
         }
     }
-    PUTC(c, '\"');
-    return JSON_STRINGIFY_OK;
+    *p++ = '"';
+    c->top -= size - (p - head);
 }
 
 static int json_stringify_value(json_context* c, const json_value* v);
-static int json_stringify_object_member(json_context* c, const json_member* m)
+static void json_stringify_object_member(json_context* c, const json_member* m)
 {
-    if (m->k == NULL)
-        return JSON_STRINGIFY_OBJECT_MEMBER_NULL;
-    PUTC(c, '\"');
+    assert(m->k != NULL);
+    PUTC(c, '"');
     PUTS(c, m->k, m->klen);
-    PUTC(c, '\"');
+    PUTC(c, '"');
     PUTC(c, ':');
     json_stringify_value(c, &m->v);
-    return JSON_STRINGIFY_OK;
 }
 
 static int json_stringify_value(json_context* c, const json_value* v)
 {
-    int ret;
-
     switch (v->type) {
     case JSON_NULL:  PUTS(c, "null", 4); break;
     case JSON_TRUE:  PUTS(c, "true", 4); break;
@@ -604,8 +614,7 @@ static int json_stringify_value(json_context* c, const json_value* v)
     case JSON_OBJECT:
         PUTC(c, '{');
         for (size_t i = 0; i < v->json_osz; ++i) {
-            if ((ret = json_stringify_object_member(c, &v->json_m[i])) != JSON_STRINGIFY_OK)
-                return ret;
+            json_stringify_object_member(c, &v->json_m[i]);
             PUTC(c, ',');
         }
         if (v->json_osz > 0)
@@ -622,10 +631,7 @@ static int json_stringify_value(json_context* c, const json_value* v)
             json_context_pop(c, 1);  /* Delete the last ',' */
         PUTC(c, ']');
         break;
-    case JSON_STRING:
-        if ((ret = json_stringify_string(c, v)) != JSON_STRINGIFY_OK)
-            return ret;
-        break;
+    case JSON_STRING: json_stringify_string(c, v); break;
     }
     return JSON_STRINGIFY_OK;
 }

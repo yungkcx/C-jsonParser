@@ -1,5 +1,5 @@
 CC=gcc
-CFLAGS= -Wall -L.
+CFLAGS= -Wall -L. -pg
 AR=ar
 ARFLAGS= rv
 LIBJP=libjp.a
