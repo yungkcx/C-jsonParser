@@ -535,10 +535,7 @@ static void json_stringify_string(json_context* c, const json_value* v)
     u_char* head;
 
     assert(v->json_s != NULL);
-    if (v->json_len > 0)
-        size = v->json_len * 6 - 2;
-    else
-        size = 2; /* "\"\"" */
+    size = v->json_len * 6 + 2;
     p = head = json_context_push(c, size);
     *p++ = '"';
     for (size_t i = 0; i < v->json_len; ++i) {
